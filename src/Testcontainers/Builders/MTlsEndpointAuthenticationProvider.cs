@@ -8,6 +8,7 @@ namespace DotNet.Testcontainers.Builders
   using DotNet.Testcontainers.Configurations;
   using JetBrains.Annotations;
   using Org.BouncyCastle.Crypto;
+  using Org.BouncyCastle.Crypto.Parameters;
   using Org.BouncyCastle.OpenSsl;
   using Org.BouncyCastle.Pkcs;
   using Org.BouncyCastle.Security;
@@ -79,11 +80,25 @@ namespace DotNet.Testcontainers.Builders
 
         var password = Guid.NewGuid().ToString("D");
 
-        var keyPair = (AsymmetricCipherKeyPair)new PemReader(keyPairStream).ReadObject();
+        var pemObject = new PemReader(keyPairStream).ReadObject();
 
-        var certificateEntry = new X509CertificateEntry(certificate);
+        if (pemObject is AsymmetricCipherKeyPair keyPair)
+        {
+        }
+        else if (pemObject is RsaPrivateCrtKeyParameters parameters)
+        {
+          keyPair = new AsymmetricCipherKeyPair(
+            new RsaKeyParameters(false, parameters.Modulus, parameters.PublicExponent), parameters);
+        }
+        else
+        {
+          throw new InvalidCastException(
+            $"Cannot cast {pemObject.GetType()} to AsymmetricCipherKeyPair or RsaPrivateCrtKeyParameters.");
+        }
 
         var keyEntry = new AsymmetricKeyEntry(keyPair.Private);
+
+        var certificateEntry = new X509CertificateEntry(certificate);
         store.SetKeyEntry(certificate.SubjectDN + "_key", keyEntry, new[] { certificateEntry });
 
         using (var certificateStream = new MemoryStream())
